@@ -10,8 +10,14 @@
 #define NTP_PACKET_SIZE 48
 #define NTP_RESPONSE_TIMEOUT 1000
 
-    class NTP
-    {
+#define DNS_SUCCESS           1
+#define DNS_TIMED_OUT        -1
+#define DNS_INVALID_SERVER   -2
+#define DNS_TRUNCATED        -3
+#define DNS_INVALID_RESPONSE -4
+
+class NTP
+{
     
     public:    
         NTP();
@@ -20,10 +26,10 @@
         void Initialize(const char *, unsigned long);
         void forceOnce();
 
-        typedef void (*NTPServerCallbackType)(uint32_t);
+        typedef void (*NTPServerResponseCallbackType)(unsigned long);
 
         // Attach and detach callback for NTP response
-        void attachInterrupt(NTPServerCallbackType);
+        void attachInterrupt(NTPServerResponseCallbackType);
         void detachInterrupt();
 
         void Do();
@@ -33,20 +39,21 @@
         byte _PacketBuffer[NTP_PACKET_SIZE];
 
         unsigned long _last_call;
-
         unsigned long _period;
         const char *_server;
 
         // Callback placeholder
-        NTPServerCallbackType _callback;
+        NTPServerResponseCallbackType _callback;
 
         void _Request();
+        bool _Resolve();
+        bool _requested;
+        bool _resolved;
+
         EthernetUDP *_UDP;
         DNSClient *_DNS;
         IPAddress _IP;
 
-        bool _requested;
-
-    };
+};
 
 #endif
