@@ -4,21 +4,27 @@ NTP::NTP()
 {
     _callback = 0;
     _resolved = false;
+    _forced = false;
 }
 
 NTP::~NTP()
 {
 }
 
-void NTP::Initialize(const char *server, unsigned long period)
+void NTP::Initialize(const char *server, long period)
 {
     _server = server;
-    _period = period;
+    _period = period; // period = -1 means no cyclical requests
 }
 
 void NTP::forceOnce()
 {
-    _last_call = millis() - _period - 1; // Guaranteed call now
+    if (!_requested) _forced = true;
+}
+
+void NTP::setPeriod(long period)
+{
+    _period = period; // period = -1 means no cyclical requests
 }
 
 void NTP::attachInterrupt(NTPServerResponseCallbackType callback)
@@ -34,7 +40,8 @@ void NTP::detachInterrupt()
 void NTP::Do()
 {
     // Simple "call-answer after timeout" state machine
-    if (abs(millis() - _last_call) > _period) {
+    if (((_period != -1) && (abs(millis() - _last_call) > _period)) || // if cyclic check is allowed and the last request is older than period
+        (_forced && !_requested)) {                                    // or if forced for one shot, but not started yet
         if (_Resolve()) {
             _UDP = new EthernetUDP;
             _UDP->begin(NTP_CLIENT_PORT);
@@ -42,6 +49,7 @@ void NTP::Do()
             _requested = true;
         }
         _last_call = millis();
+        _forced = false;
     }
     if ((_requested) && (abs(millis() - _last_call) > NTP_RESPONSE_TIMEOUT)) {
         if (_UDP->parsePacket()) {
@@ -72,10 +80,13 @@ bool NTP::_Resolve()
     _DNS->begin(Ethernet.dnsServerIP());
     int _DNSResult = _DNS->getHostByName(_server, _DNSIP);
     if (_DNSResult == DNS_SUCCESS) {
+#ifdef NTP_DEBUG
         Serial.print(F("NTPClient: DNS resolving successful: ")); Serial.println(_DNSIP);
+#endif
         _IP = _DNSIP;
         _resolved = true;
     } else {
+#ifdef NTP_DEBUG
         Serial.print(F("NTPClient: DNS resolving not successful, error code: "));
         switch (_DNSResult) {
             case DNS_TIMED_OUT:
@@ -89,11 +100,16 @@ bool NTP::_Resolve()
             default:
                 Serial.print(F("UNKNOWN, "));
         }
+#endif
         if (_resolved) {
+#ifdef NTP_DEBUG
             Serial.print(F("using last known IP address: ")); Serial.println(_IP);
+#endif
         } else {
             // Can happen only directly after restart if no resolving was made earlier
+#ifdef NTP_DEBUG
             Serial.println("waiting for the next time, no NTP requset will be sent");
+#endif
             _successful = false;
         }
     }
